@@ -1,6 +1,6 @@
 
 from flask import Flask, render_template, request, send_file
-import subprocess, os, uuid, tempfile, threading, time, urllib.request
+import subprocess, sys, os, uuid, tempfile, threading, time, urllib.request
 
 app = Flask(__name__)
 DOWNLOAD_DIR = os.path.join(tempfile.gettempdir(), "downloads")
@@ -37,23 +37,27 @@ def index():
         file_id = str(uuid.uuid4())
         out_template = os.path.join(DOWNLOAD_DIR, f"{file_id}.%(ext)s")
 
-        cmd = ["yt-dlp", "-o", out_template]
+        sub_args = ["-o", out_template]
 
         if quality == "audio":
-            cmd.extend(["-f", "bestaudio/best", "-x", "--audio-format", "mp3"])
+            sub_args.extend(["-f", "ba/bestaudio/b/best"])
         elif quality in ["1080p", "720p", "480p", "360p", "240p"]:
             height = quality.replace("p", "")
-            # Prefer single file format with requested height, fallback to combined or best under/equal height
-            format_spec = f"best[height<={height}]/bestvideo[height<={height}]+bestaudio/best"
-            cmd.extend(["-f", format_spec])
+            format_spec = f"bestvideo[height<={height}]+bestaudio/best[height<={height}]/b[height<={height}]/best"
+            sub_args.extend(["-f", format_spec])
         else:
-            # best quality
-            cmd.extend(["-f", "best/bestvideo+bestaudio"])
+            sub_args.extend(["-f", "bestvideo+bestaudio/best/b"])
 
-        cmd.append(url)
+        sub_args.append(url)
 
         try:
-            subprocess.run(cmd, check=True)
+            # First try yt-dlp on PATH, fallback to python -m yt_dlp
+            try:
+                cmd = ["yt-dlp"] + sub_args
+                subprocess.run(cmd, check=True, capture_output=True, text=True)
+            except (FileNotFoundError, OSError):
+                cmd = [sys.executable, "-m", "yt_dlp"] + sub_args
+                subprocess.run(cmd, check=True, capture_output=True, text=True)
 
             # Find the generated file (extension might be mp4, m4a, mp3, webm, etc.)
             downloaded_files = [
@@ -62,11 +66,16 @@ def index():
                 if f.startswith(file_id)
             ]
             if not downloaded_files:
-                return render_template("index.html", error="Failed to find downloaded file.")
+                return render_template("index.html", error="Failed to find downloaded file. The video may be unavailable.")
 
             downloaded_file = downloaded_files[0]
             download_name = os.path.basename(downloaded_file)
             return send_file(downloaded_file, as_attachment=True, download_name=download_name)
+        except subprocess.CalledProcessError as e:
+            error_msg = "Download failed. The video may be private, unavailable, or age-restricted."
+            if e.stderr and "unavailable" in e.stderr.lower():
+                error_msg = "This video is unavailable or private on YouTube/Instagram."
+            return render_template("index.html", error=error_msg)
         except Exception as e:
             return render_template("index.html", error=f"Download failed: {str(e)}")
 
