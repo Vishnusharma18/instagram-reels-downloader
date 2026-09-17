@@ -12,7 +12,9 @@ DOWNLOAD_DIR = os.path.join(tempfile.gettempdir(), "clipfetch_downloads")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 HAS_FFMPEG = shutil.which("ffmpeg") is not None
-logger.info("FFmpeg availability: %s", HAS_FFMPEG)
+DENO_PATH = shutil.which("deno")
+NODE_PATH = shutil.which("node")
+logger.info("FFmpeg=%s deno=%s node=%s", HAS_FFMPEG, DENO_PATH, NODE_PATH)
 
 VALID_QUALITIES = ["1080p", "720p", "480p", "360p", "240p"]
 COOKIES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cookies.txt")
@@ -22,11 +24,10 @@ UA = (
     "Chrome/124.0.0.0 Safari/537.36"
 )
 
-# Try multiple YouTube clients — some break when YouTube rolls out SABR experiments
 PLAYER_CLIENT_SETS = [
-    ["tv", "ios"],
-    ["tv_embedded", "visionos", "mweb"],
-    ["android", "ios", "web"],
+    ["tv", "ios", "mweb", "android"],
+    ["tv_embedded", "visionos", "web"],
+    ["ios", "tv"],
 ]
 
 
@@ -53,6 +54,16 @@ def build_format(height):
     return f"b[height<={height}][ext=mp4]/b[height<={height}]/b"
 
 
+def js_runtime_opts():
+    """YouTube needs a JS runtime to solve challenges (Deno preferred)."""
+    runtimes = {}
+    if DENO_PATH:
+        runtimes["deno"] = {"path": DENO_PATH}
+    if NODE_PATH:
+        runtimes["node"] = {"path": NODE_PATH}
+    return runtimes
+
+
 def make_opts(height, outtmpl, player_clients):
     opts = {
         "format": build_format(height),
@@ -67,7 +78,11 @@ def make_opts(height, outtmpl, player_clients):
         "merge_output_format": "mp4",
         "extractor_args": {"youtube": {"player_client": player_clients}},
         "http_headers": {"User-Agent": UA},
+        "remote_components": ["ejs:github"],
     }
+    runtimes = js_runtime_opts()
+    if runtimes:
+        opts["js_runtimes"] = runtimes
     if os.path.isfile(COOKIES_PATH):
         opts["cookiefile"] = COOKIES_PATH
     return opts
@@ -76,6 +91,11 @@ def make_opts(height, outtmpl, player_clients):
 def friendly_error(exc):
     msg = str(exc)
     low = msg.lower()
+    if "player response" in low:
+        return (
+            "YouTube blocked extraction on this server. "
+            "Wait a minute and retry, or try another public video."
+        )
     if any(x in low for x in ("sign in", "login required", "cookies", "private video")):
         return "This video may be private or require login."
     if any(x in low for x in ("unsupported url", "no video formats", "unable to extract")):
@@ -86,6 +106,8 @@ def friendly_error(exc):
         return "YouTube is blocking cloud servers right now. Wait a few minutes or try another video."
     if "timed out" in low or "timeout" in low:
         return "Timed out. Try 360p or a shorter video."
+    if "javascript runtime" in low or "js runtime" in low or "ejs" in low:
+        return "Server is missing YouTube JS support. Redeploy the latest Docker image."
     short = msg.replace("ERROR: ", "").strip()
     if len(short) > 160:
         short = short[:160] + "…"
@@ -136,7 +158,6 @@ def download_video(url, height):
         except Exception as e:
             last_error = e
             logger.warning("Client set %s failed: %s", clients, e)
-            # clean partials for this attempt
             filepath, candidates = find_downloaded_file(file_id)
             for p in candidates:
                 try:
@@ -149,7 +170,12 @@ def download_video(url, height):
 
 @app.route("/ping", methods=["GET"])
 def ping():
-    return {"status": "ok", "ffmpeg": HAS_FFMPEG}, 200
+    return {
+        "status": "ok",
+        "ffmpeg": HAS_FFMPEG,
+        "deno": bool(DENO_PATH),
+        "node": bool(NODE_PATH),
+    }, 200
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -175,7 +201,7 @@ def index():
         )
 
     try:
-        logger.info("Download start: %s @ %s (ffmpeg=%s)", url, quality, HAS_FFMPEG)
+        logger.info("Download start: %s @ %s (ffmpeg=%s deno=%s)", url, quality, HAS_FFMPEG, bool(DENO_PATH))
         filepath, candidates, safe_name = download_video(url, quality[:-1])
         logger.info("Download ok: %s (%s bytes)", filepath, os.path.getsize(filepath))
 
