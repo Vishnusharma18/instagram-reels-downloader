@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: clipfetch
+    runtime: docker
+    plan: free
+    healthCheckPath: /ping
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: SELF_URL
+        sync: false
