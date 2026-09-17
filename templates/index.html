@@ -21,7 +21,7 @@
         <header class="brand reveal">
             <p class="brand__mark">ClipFetch</p>
             <h1 class="brand__headline">Save Reels &amp; videos in one tap</h1>
-            <p class="brand__sub">Paste an Instagram Reel or YouTube link. Choose quality. Download.</p>
+            <p class="brand__sub">Paste a link → pick quality → download starts in seconds.</p>
         </header>
 
         <section class="downloader reveal reveal--delay" aria-label="Download form">
@@ -65,17 +65,19 @@
                     <div class="quality__options">
                         {% for q in ['1080p', '720p', '480p', '360p', '240p'] %}
                         <label class="quality__option">
-                            <input type="radio" name="quality" value="{{ q }}" {% if (quality or '720p') == q %}checked{% endif %}>
+                            <input type="radio" name="quality" value="{{ q }}" {% if (quality or '480p') == q %}checked{% endif %}>
                             <span>{{ q }}</span>
                         </label>
                         {% endfor %}
                     </div>
+                    <p class="hint">Tip: 360p / 480p is much faster on free hosting.</p>
                 </fieldset>
 
                 <button type="submit" class="cta" id="submit-btn">
                     <span class="cta__label">Download video</span>
                     <span class="cta__spinner" aria-hidden="true"></span>
                 </button>
+                <p class="status-line" id="status-line" hidden>Finding video… download will start shortly</p>
             </form>
         </section>
 
@@ -87,17 +89,22 @@
     <script>
         const form = document.getElementById('download-form');
         const btn = document.getElementById('submit-btn');
+        const status = document.getElementById('status-line');
 
         form.addEventListener('submit', () => {
             const url = document.getElementById('url').value.trim();
             if (!url) return;
             btn.classList.add('is-loading');
             btn.disabled = true;
-            // File downloads keep the page open — reset UI after a while
+            status.hidden = false;
+            setTimeout(() => { status.textContent = 'Connecting to video…'; }, 2500);
+            setTimeout(() => { status.textContent = 'Starting download…'; }, 6000);
             setTimeout(() => {
                 btn.classList.remove('is-loading');
                 btn.disabled = false;
-            }, 12000);
+                status.hidden = true;
+                status.textContent = 'Finding video… download will start shortly';
+            }, 45000);
         });
     </script>
 </body>

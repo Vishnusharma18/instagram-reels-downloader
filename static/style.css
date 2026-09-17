@@ -296,6 +296,20 @@ body {
     box-shadow: 0 0 0 3px rgba(15, 107, 99, 0.25);
 }
 
+.hint {
+    margin: 0.65rem 0 0;
+    font-size: 0.8rem;
+    color: var(--ink-muted);
+}
+
+.status-line {
+    margin: 0;
+    text-align: center;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--teal-deep);
+}
+
 /* CTA */
 
 .cta {
