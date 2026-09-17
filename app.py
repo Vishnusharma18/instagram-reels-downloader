@@ -1,6 +1,6 @@
 
 from flask import Flask, render_template, request, send_file
-import subprocess, os, uuid, tempfile, threading, time, urllib.request
+import subprocess, sys, os, uuid, tempfile, threading, time, urllib.request
 
 app = Flask(__name__)
 DOWNLOAD_DIR = os.path.join(tempfile.gettempdir(), "downloads")
@@ -37,22 +37,27 @@ def index():
         file_id = str(uuid.uuid4())
         out_template = os.path.join(DOWNLOAD_DIR, f"{file_id}.%(ext)s")
 
-        cmd = ["yt-dlp", "-o", out_template]
+        sub_args = ["-o", out_template]
 
         if quality == "audio":
-            cmd.extend(["-f", "ba/bestaudio/b/best"])
+            sub_args.extend(["-f", "ba/bestaudio/b/best"])
         elif quality in ["1080p", "720p", "480p", "360p", "240p"]:
             height = quality.replace("p", "")
-            format_spec = f"b[height<={height}]/best[height<={height}]/bestvideo[height<={height}]+bestaudio/best"
-            cmd.extend(["-f", format_spec])
+            format_spec = f"bestvideo[height<={height}]+bestaudio/best[height<={height}]/b[height<={height}]/best"
+            sub_args.extend(["-f", format_spec])
         else:
-            # best quality (prefer single-file format 'b' or 'best' first so ffmpeg isn't strictly required)
-            cmd.extend(["-f", "b/best/bestvideo+bestaudio"])
+            sub_args.extend(["-f", "bestvideo+bestaudio/best/b"])
 
-        cmd.append(url)
+        sub_args.append(url)
 
         try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            # First try yt-dlp on PATH, fallback to python -m yt_dlp
+            try:
+                cmd = ["yt-dlp"] + sub_args
+                subprocess.run(cmd, check=True, capture_output=True, text=True)
+            except (FileNotFoundError, OSError):
+                cmd = [sys.executable, "-m", "yt_dlp"] + sub_args
+                subprocess.run(cmd, check=True, capture_output=True, text=True)
 
             # Find the generated file (extension might be mp4, m4a, mp3, webm, etc.)
             downloaded_files = [
