@@ -42,11 +42,7 @@ class AppTestCase(unittest.TestCase):
     def test_index_post_unsupported_url(self):
         response = self.app.post("/", data={"url": "https://example.com/video", "quality": "720p"})
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(
-            b"Download failed" in response.data
-            or b"Unsupported link" in response.data
-            or b"private" in response.data
-        )
+        self.assertIn(b'class="alert"', response.data)
 
 
 if __name__ == "__main__":

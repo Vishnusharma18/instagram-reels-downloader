@@ -48,12 +48,13 @@
                 <label class="field">
                     <span class="field__label">Video link</span>
                     <input
-                        type="url"
+                        type="text"
                         id="url"
                         name="url"
                         class="field__input"
-                        placeholder="https://www.instagram.com/reel/… or youtube.com/watch?v=…"
+                        placeholder="Paste YouTube / Shorts / Instagram Reel link"
                         autocomplete="off"
+                        inputmode="url"
                         required
                         value="{{ url or '' }}"
                     >
