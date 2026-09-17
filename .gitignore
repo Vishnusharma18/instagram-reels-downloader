@@ -1,0 +1,6 @@
+downloads/
+venv/
+__pycache__/
+*.pyc
+app.log
+/home/jules/verification/
