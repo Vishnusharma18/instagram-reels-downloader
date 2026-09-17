@@ -1,29 +1,42 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Instagram Reel Downloader</title>
+    <title>All-in-One Video Downloader</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="/static/style.css">
   </head>
   <body>
     <div class="page">
       <div class="card">
-        <h1>Instagram Reel Downloader</h1>
+        <h1>Video & Shorts Downloader</h1>
 
         <form method="POST">
           <input
             type="text"
             name="url"
-            placeholder="Paste Instagram Reel URL"
+            placeholder="Paste YouTube, Shorts, or Reel URL"
             required>
-          <button type="submit">Download Reel</button>
+
+          <div class="select-container">
+            <select name="quality" id="quality">
+              <option value="best" selected>Best Quality</option>
+              <option value="1080p">1080p</option>
+              <option value="720p">720p</option>
+              <option value="480p">480p</option>
+              <option value="360p">360p</option>
+              <option value="240p">240p</option>
+              <option value="audio">Audio Only (MP3)</option>
+            </select>
+          </div>
+
+          <button type="submit">Download</button>
         </form>
 
         {% if error %}
         <p class="error">{{ error }}</p>
         {% endif %}
 
-        <p class="note">✔ Works only for public reels</p>
+        <p class="note">✔ Supports YouTube, Shorts & Instagram Reels</p>
         <p class="note">Made By vishnu with &#9829;</p>
       </div>
     </div>
