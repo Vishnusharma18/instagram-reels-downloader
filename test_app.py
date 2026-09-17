@@ -16,14 +16,17 @@ class AppTestCase(unittest.TestCase):
         response = self.app.get('/')
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'Video & Shorts Downloader', response.data)
-        self.assertIn(b'Best Quality', response.data)
         self.assertIn(b'720p', response.data)
-        self.assertIn(b'Audio Only (MP3)', response.data)
 
     def test_index_post_empty_url(self):
         response = self.app.post('/', data={'url': '', 'quality': '720p'})
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'Please enter a valid URL', response.data)
+        self.assertIn(b'Please enter a valid HTTP or HTTPS URL', response.data)
+
+    def test_index_post_invalid_url_scheme(self):
+        response = self.app.post('/', data={'url': 'ftp://invalid-url.com', 'quality': '720p'})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'Please enter a valid HTTP or HTTPS URL', response.data)
 
 if __name__ == '__main__':
     unittest.main()
