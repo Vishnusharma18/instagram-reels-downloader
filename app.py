@@ -1,17 +1,7 @@
-from flask import (
-    Flask,
-    render_template,
-    request,
-    send_file,
-    after_this_request,
-    Response,
-    stream_with_context,
-)
+from flask import Flask, render_template, request, send_file, after_this_request
 import os, tempfile, time, urllib.request, shutil, logging, re, uuid
 from threading import Thread
-from urllib.parse import quote
 
-import requests
 import yt_dlp
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -22,7 +12,7 @@ DOWNLOAD_DIR = os.path.join(tempfile.gettempdir(), "clipfetch_downloads")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 HAS_FFMPEG = shutil.which("ffmpeg") is not None
-logger.info(f"FFmpeg availability: {HAS_FFMPEG}")
+logger.info("FFmpeg availability: %s", HAS_FFMPEG)
 
 VALID_QUALITIES = ["1080p", "720p", "480p", "360p", "240p"]
 COOKIES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cookies.txt")
@@ -32,45 +22,50 @@ UA = (
     "Chrome/124.0.0.0 Safari/537.36"
 )
 
+# Try multiple YouTube clients — some break when YouTube rolls out SABR experiments
+PLAYER_CLIENT_SETS = [
+    ["tv", "ios"],
+    ["tv_embedded", "visionos", "mweb"],
+    ["android", "ios", "web"],
+]
 
-def render_index(error=None, url="", quality="480p"):
+
+def render_index(error=None, url="", quality="360p"):
     return render_template("index.html", error=error, url=url, quality=quality)
 
 
-def normalize_url(url: str) -> str:
+def normalize_url(url):
     url = (url or "").strip()
     if url.startswith("http://"):
         url = "https://" + url[7:]
     return url
 
 
-def base_ydl_opts(height: str) -> dict:
-    # Progressive (single file) first = fast stream, no merge wait
+def build_format(height):
     if HAS_FFMPEG:
-        fmt = (
+        return (
             f"b[height<={height}][ext=mp4]/"
             f"b[height<={height}]/"
             f"bv*[height<={height}][ext=mp4]+ba[ext=m4a]/"
             f"bv*[height<={height}]+ba/"
             f"b/bv*+ba"
         )
-    else:
-        fmt = f"b[height<={height}][ext=mp4]/b[height<={height}]/b"
+    return f"b[height<={height}][ext=mp4]/b[height<={height}]/b"
 
+
+def make_opts(height, outtmpl, player_clients):
     opts = {
-        "format": fmt,
+        "format": build_format(height),
+        "outtmpl": outtmpl,
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
-        "skip_download": True,
-        "socket_timeout": 20,
+        "socket_timeout": 30,
         "retries": 3,
-        "extractor_args": {
-            "youtube": {
-                # android often gives progressive mp4 (fast)
-                "player_client": ["android", "ios", "web"],
-            }
-        },
+        "fragment_retries": 3,
+        "concurrent_fragment_downloads": 3,
+        "merge_output_format": "mp4",
+        "extractor_args": {"youtube": {"player_client": player_clients}},
         "http_headers": {"User-Agent": UA},
     }
     if os.path.isfile(COOKIES_PATH):
@@ -78,73 +73,27 @@ def base_ydl_opts(height: str) -> dict:
     return opts
 
 
-def friendly_error(exc: Exception) -> str:
+def friendly_error(exc):
     msg = str(exc)
     low = msg.lower()
-    if "sign in" in low or "login" in low or "cookies" in low or "private" in low:
-        return "This video may be private or require login. Try a public link."
-    if "unsupported url" in low or "no video formats" in low or "unable to extract" in low:
-        return "Unsupported link. Use a public Instagram Reel or YouTube URL."
+    if any(x in low for x in ("sign in", "login required", "cookies", "private video")):
+        return "This video may be private or require login."
+    if any(x in low for x in ("unsupported url", "no video formats", "unable to extract")):
+        return "Unsupported link. Use a public YouTube or Instagram URL."
     if "requested format is not available" in low:
-        return "That quality is not available. Try 360p or 480p."
-    if "http error 403" in low or "forbidden" in low:
-        return "YouTube blocked this server IP. Try again later or use a different video."
+        return "That quality is not available. Try 360p."
+    if any(x in low for x in ("403", "forbidden", "sabr")):
+        return "YouTube is blocking cloud servers right now. Wait a few minutes or try another video."
     if "timed out" in low or "timeout" in low:
-        return "Timed out. Try 360p / a shorter video."
-    return "Download failed. Try 360p or another link."
+        return "Timed out. Try 360p or a shorter video."
+    short = msg.replace("ERROR: ", "").strip()
+    if len(short) > 160:
+        short = short[:160] + "…"
+    return f"Download failed: {short}"
 
 
-def is_progressive(info: dict) -> bool:
-    if not info.get("url"):
-        return False
-    if info.get("requested_formats"):
-        return False
-    vcodec = info.get("vcodec") or "none"
-    acodec = info.get("acodec") or "none"
-    return vcodec != "none" and acodec != "none"
-
-
-def stream_from_url(media_url: str, headers: dict, filename: str = "video.mp4"):
-    upstream = requests.get(media_url, stream=True, headers=headers, timeout=30)
-    upstream.raise_for_status()
-
-    def generate():
-        try:
-            for chunk in upstream.iter_content(chunk_size=256 * 1024):
-                if chunk:
-                    yield chunk
-        finally:
-            upstream.close()
-
-    content_type = upstream.headers.get("Content-Type", "video/mp4")
-    resp_headers = {
-        "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}",
-        "Cache-Control": "no-store",
-    }
-    length = upstream.headers.get("Content-Length")
-    if length:
-        resp_headers["Content-Length"] = length
-
-    return Response(
-        stream_with_context(generate()),
-        status=200,
-        headers=resp_headers,
-        mimetype=content_type,
-    )
-
-
-def download_to_disk(url: str, height: str):
-    file_id = str(uuid.uuid4())
-    outtmpl = os.path.join(DOWNLOAD_DIR, file_id + ".%(ext)s")
-    opts = base_ydl_opts(height)
-    opts.pop("skip_download", None)
-    opts["outtmpl"] = outtmpl
-    opts["merge_output_format"] = "mp4"
-    opts["concurrent_fragment_downloads"] = 4
-
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        ydl.download([url])
-
+def find_downloaded_file(file_id):
+    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
     candidates = [
         os.path.join(DOWNLOAD_DIR, name)
         for name in os.listdir(DOWNLOAD_DIR)
@@ -152,13 +101,55 @@ def download_to_disk(url: str, height: str):
     ]
     candidates = [p for p in candidates if not re.search(r"\.f\d+\.", os.path.basename(p))]
     if not candidates:
-        raise RuntimeError("File not found after download")
+        return None, []
     return max(candidates, key=os.path.getmtime), candidates
+
+
+def download_video(url, height):
+    last_error = None
+    title = "video"
+
+    for clients in PLAYER_CLIENT_SETS:
+        file_id = str(uuid.uuid4())
+        outtmpl = os.path.join(DOWNLOAD_DIR, file_id + ".%(ext)s")
+        opts = make_opts(height, outtmpl, clients)
+        try:
+            logger.info("Trying clients=%s for %s", clients, url)
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                if isinstance(info, dict):
+                    title = (info.get("title") or "video")[:80]
+
+            filepath, candidates = find_downloaded_file(file_id)
+            if not filepath:
+                raise RuntimeError("Download finished but file was not found")
+            if os.path.getsize(filepath) < 1024:
+                for p in candidates:
+                    try:
+                        os.remove(p)
+                    except OSError:
+                        pass
+                raise RuntimeError("Downloaded file was empty")
+
+            safe_name = re.sub(r"[^\w\-]+", "_", title).strip("_") or "video"
+            return filepath, candidates, safe_name
+        except Exception as e:
+            last_error = e
+            logger.warning("Client set %s failed: %s", clients, e)
+            # clean partials for this attempt
+            filepath, candidates = find_downloaded_file(file_id)
+            for p in candidates:
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+
+    raise last_error or RuntimeError("Download failed")
 
 
 @app.route("/ping", methods=["GET"])
 def ping():
-    return {"status": "ok"}, 200
+    return {"status": "ok", "ffmpeg": HAS_FFMPEG}, 200
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -167,7 +158,7 @@ def index():
         return render_index()
 
     url = normalize_url(request.form.get("url") or "")
-    quality = request.form.get("quality") or "480p"
+    quality = request.form.get("quality") or "360p"
 
     if not url or not re.match(r"^https?://", url, re.I):
         return render_index(
@@ -183,29 +174,10 @@ def index():
             quality=quality,
         )
 
-    height = quality[:-1]
-
     try:
-        logger.info(f"Resolve: {url} @ {quality}")
-        opts = base_ydl_opts(height)
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-
-        title = (info.get("title") or "video")[:80]
-        safe_name = re.sub(r"[^\w\-]+", "_", title).strip("_") or "video"
-
-        # Fast path: stream progressive URL straight to browser
-        if is_progressive(info):
-            media_url = info["url"]
-            headers = {"User-Agent": UA, "Referer": url}
-            http_headers = info.get("http_headers") or {}
-            headers.update(http_headers)
-            logger.info("Fast stream (progressive)")
-            return stream_from_url(media_url, headers, filename=f"{safe_name}.mp4")
-
-        # Slow path: merge on disk (only when needed)
-        logger.info("Fallback disk download (merge)")
-        filepath, candidates = download_to_disk(url, height)
+        logger.info("Download start: %s @ %s (ffmpeg=%s)", url, quality, HAS_FFMPEG)
+        filepath, candidates, safe_name = download_video(url, quality[:-1])
+        logger.info("Download ok: %s (%s bytes)", filepath, os.path.getsize(filepath))
 
         @after_this_request
         def cleanup(response):
@@ -214,19 +186,18 @@ def index():
                     if os.path.exists(path):
                         os.remove(path)
             except Exception as e:
-                logger.error(f"Cleanup error: {e}")
+                logger.error("Cleanup error: %s", e)
             return response
 
         ext = os.path.splitext(filepath)[1].lstrip(".") or "mp4"
         return send_file(
             filepath,
             as_attachment=True,
-            download_name=f"{safe_name}.{ext}",
+            download_name="{}.{}".format(safe_name, ext),
             mimetype="video/mp4" if ext == "mp4" else None,
         )
-
     except Exception as e:
-        logger.error(f"Download failed: {e}")
+        logger.exception("Download failed")
         return render_index(error=friendly_error(e), url=url, quality=quality)
 
 
@@ -238,11 +209,11 @@ def start_self_ping():
             logger.warning("No SELF_URL / RENDER_EXTERNAL_URL — self-ping disabled")
             break
         try:
-            ping_url = f"{base.rstrip('/')}/ping"
+            ping_url = "{}/ping".format(base.rstrip("/"))
             urllib.request.urlopen(ping_url, timeout=10)
-            logger.info(f"Pinged {ping_url}")
+            logger.info("Pinged %s", ping_url)
         except Exception as e:
-            logger.error(f"Ping failed: {e}")
+            logger.error("Ping failed: %s", e)
         time.sleep(50)
 
 
@@ -250,4 +221,4 @@ Thread(target=start_self_ping, daemon=True).start()
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5001"))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=os.getenv("FLASK_DEBUG") == "1")

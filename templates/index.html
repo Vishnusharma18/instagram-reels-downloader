@@ -65,12 +65,12 @@
                     <div class="quality__options">
                         {% for q in ['1080p', '720p', '480p', '360p', '240p'] %}
                         <label class="quality__option">
-                            <input type="radio" name="quality" value="{{ q }}" {% if (quality or '480p') == q %}checked{% endif %}>
+                            <input type="radio" name="quality" value="{{ q }}" {% if (quality or '360p') == q %}checked{% endif %}>
                             <span>{{ q }}</span>
                         </label>
                         {% endfor %}
                     </div>
-                    <p class="hint">Tip: 360p / 480p is much faster on free hosting.</p>
+                    <p class="hint">Use 360p for fastest downloads on free hosting.</p>
                 </fieldset>
 
                 <button type="submit" class="cta" id="submit-btn">
