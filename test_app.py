@@ -7,6 +7,11 @@ class AppTestCase(unittest.TestCase):
         self.app = app.test_client()
         self.app.testing = True
 
+    def test_ping(self):
+        response = self.app.get('/ping')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json, {"status": "ok"})
+
     def test_index_get(self):
         response = self.app.get('/')
         self.assertEqual(response.status_code, 200)

@@ -1,10 +1,30 @@
 
 from flask import Flask, render_template, request, send_file
-import subprocess, os, uuid
+import subprocess, os, uuid, tempfile, threading, time, urllib.request
 
 app = Flask(__name__)
-DOWNLOAD_DIR = "downloads"
+DOWNLOAD_DIR = os.path.join(tempfile.gettempdir(), "downloads")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
+@app.route("/ping", methods=["GET"])
+def ping():
+    return {"status": "ok"}, 200
+
+def start_self_ping():
+    time.sleep(10)
+    while True:
+        url = os.getenv("RENDER_EXTERNAL_URL") or os.getenv("SELF_URL")
+        if url:
+            try:
+                ping_url = f"{url.rstrip('/')}/ping"
+                urllib.request.urlopen(ping_url, timeout=10)
+            except Exception as e:
+                print(f"Self ping failed: {e}")
+        time.sleep(10 * 60) # Ping every 10 minutes
+
+# Start keep-alive ping thread
+ping_thread = threading.Thread(target=start_self_ping, daemon=True)
+ping_thread.start()
 
 @app.route("/", methods=["GET", "POST"])
 def index():
