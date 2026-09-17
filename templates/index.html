@@ -10,7 +10,7 @@
       <div class="card">
         <h1>Video & Shorts Downloader</h1>
 
-        <form method="POST">
+        <form method="POST" id="download-form" onsubmit="handleFormSubmit()">
           <input
             type="text"
             name="url"
@@ -19,9 +19,9 @@
 
           <div class="select-container">
             <select name="quality" id="quality">
-              <option value="best" selected>Best Quality</option>
+              <option value="720p" selected>720p (Fastest)</option>
+              <option value="best">Best Quality (1080p)</option>
               <option value="1080p">1080p</option>
-              <option value="720p">720p</option>
               <option value="480p">480p</option>
               <option value="360p">360p</option>
               <option value="240p">240p</option>
@@ -29,8 +29,22 @@
             </select>
           </div>
 
-          <button type="submit">Download</button>
+          <button type="submit" id="btn-submit">
+            <span id="btn-text">Download</span>
+            <span id="btn-spinner" style="display: none;">⌛ Downloading... Please wait</span>
+          </button>
         </form>
+
+        <script>
+          function handleFormSubmit() {
+            const btn = document.getElementById("btn-submit");
+            const btnText = document.getElementById("btn-text");
+            const btnSpinner = document.getElementById("btn-spinner");
+            btnText.style.display = "none";
+            btnSpinner.style.display = "inline";
+            setTimeout(() => { btn.disabled = true; }, 10);
+          }
+        </script>
 
         {% if error %}
         <p class="error">{{ error }}</p>

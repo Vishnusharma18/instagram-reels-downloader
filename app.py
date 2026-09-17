@@ -37,7 +37,12 @@ def index():
         file_id = str(uuid.uuid4())
         out_template = os.path.join(DOWNLOAD_DIR, f"{file_id}.%(ext)s")
 
-        sub_args = ["-o", out_template]
+        sub_args = [
+            "-o", out_template,
+            "--no-playlist",
+            "--concurrent-fragments", "4",
+            "--socket-timeout", "20"
+        ]
 
         if quality == "audio":
             sub_args.extend(["-f", "ba/bestaudio/b/best"])
@@ -46,7 +51,8 @@ def index():
             format_spec = f"bestvideo[height<={height}]+bestaudio/best[height<={height}]/b[height<={height}]/best"
             sub_args.extend(["-f", format_spec])
         else:
-            sub_args.extend(["-f", "bestvideo+bestaudio/best/b"])
+            # Cap best quality to 1080p maximum so server doesn't download multi-gigabyte 4K/8K files
+            sub_args.extend(["-f", "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best/b"])
 
         sub_args.append(url)
 
