@@ -1,58 +1,48 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <title>All-in-One Video Downloader</title>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="/static/style.css">
-  </head>
-  <body>
-    <div class="page">
-      <div class="card">
-        <h1>Video & Shorts Downloader</h1>
-
-        <form method="POST" id="download-form" onsubmit="handleFormSubmit()">
-          <input
-            type="text"
-            name="url"
-            placeholder="Paste YouTube, Shorts, or Reel URL"
-            required>
-
-          <div class="select-container">
-            <select name="quality" id="quality">
-              <option value="720p" selected>720p (Fastest)</option>
-              <option value="best">Best Quality (1080p)</option>
-              <option value="1080p">1080p</option>
-              <option value="480p">480p</option>
-              <option value="360p">360p</option>
-              <option value="240p">240p</option>
-              <option value="audio">Audio Only (MP3)</option>
-            </select>
-          </div>
-
-          <button type="submit" id="btn-submit">
-            <span id="btn-text">Download</span>
-            <span id="btn-spinner" style="display: none;">⌛ Downloading... Please wait</span>
-          </button>
-        </form>
-
-        <script>
-          function handleFormSubmit() {
-            const btn = document.getElementById("btn-submit");
-            const btnText = document.getElementById("btn-text");
-            const btnSpinner = document.getElementById("btn-spinner");
-            btnText.style.display = "none";
-            btnSpinner.style.display = "inline";
-            setTimeout(() => { btn.disabled = true; }, 10);
-          }
-        </script>
-
-        {% if error %}
-        <p class="error">{{ error }}</p>
-        {% endif %}
-
-        <p class="note">✔ Supports YouTube, Shorts & Instagram Reels</p>
-        <p class="note">Made By vishnu with &#9829;</p>
-      </div>
+    <title>Video & Shorts Downloader</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="bg-light">
+    <div class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card shadow-sm">
+                    <div class="card-header text-center bg-primary text-white">
+                        <h1 class="h4">Video & Shorts Downloader</h1>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST" action="/">
+                            <div class="mb-3">
+                                <label for="url" class="form-label">Video URL:</label>
+                                <input type="text" id="url" name="url" class="form-control" placeholder="Enter video URL" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="quality" class="form-label">Quality:</label>
+                                <select id="quality" name="quality" class="form-select">
+                                    <option value="720p">720p</option>
+                                    <option value="480p">480p</option>
+                                </select>
+                            </div>
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary">Download</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="card-footer text-center text-muted">
+                        <small>Powered by Flask & Bootstrap</small>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-  </body>
+    <!-- Bootstrap JS (Optional) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
 </html>
